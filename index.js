@@ -1,5 +1,4 @@
 // index.js – Phantom Cat WhatsApp bot
-// Step 2: auto-send ONE template whenever someone messages the number.
 
 const express = require("express");
 const axios = require("axios");
@@ -7,10 +6,14 @@ const axios = require("axios");
 const app = express();
 app.use(express.json());
 
-// 🔐 Env vars from Render
+// Env vars from Render
 const VERIFY_TOKEN = process.env.WHATSAPP_VERIFY_TOKEN;
 const WHATSAPP_ACCESS_TOKEN = process.env.WHATSAPP_ACCESS_TOKEN;
 const PHONE_NUMBER_ID = process.env.WHATSAPP_PHONE_NUMBER_ID;
+
+// Simple memory: last time we sent the template to each user
+// { "<phone>": timestamp }
+const lastTemplateSentAt = {};
 
 // --- Health check ---
 app.get("/", (req, res) => {
@@ -37,7 +40,6 @@ app.post("/webhook", async (req, res) => {
   try {
     const body = req.body;
 
-    // Safety checks
     if (!body.object || !body.entry || !body.entry[0].changes) {
       return res.sendStatus(200);
     }
@@ -53,19 +55,32 @@ app.post("/webhook", async (req, res) => {
     const message = messages[0];
     const from = message.from; // WhatsApp user phone (international format)
 
-    console.log("📩 Incoming message from", from);
+    console.log("📩 Incoming message from", from, "type:", message.type);
 
-    // 👉 Step 2: ALWAYS send the promo template back
+    // Only send template once per 24 hours per user
+    const now = Date.now();
+    const last = lastTemplateSentAt[from] || 0;
+    const TWENTY_FOUR_HOURS = 24 * 60 * 60 * 1000;
+
+    if (now - last < TWENTY_FOUR_HOURS) {
+      console.log("⏭️  Template already sent to", from, "within 24h – skipping.");
+      return res.sendStatus(200);
+    }
+
     await sendOfferTemplate(from);
+    lastTemplateSentAt[from] = now;
 
     return res.sendStatus(200);
   } catch (err) {
-    console.error("Error in /webhook handler:", err.response?.data || err.message);
+    console.error(
+      "Error in /webhook handler:",
+      err.response?.data || err.message
+    );
     return res.sendStatus(500);
   }
 });
 
-// --- Helper: send the offer template with flow button ---
+// --- Helper: send the offer template ---
 async function sendOfferTemplate(to) {
   const url = `https://graph.facebook.com/v21.0/${PHONE_NUMBER_ID}/messages`;
 
@@ -74,24 +89,23 @@ async function sendOfferTemplate(to) {
     to,
     type: "template",
     template: {
-      // 🔴 CHANGE THIS to your real template name
+      // 👇 EXACT template name from WhatsApp Manager
       name: "whatsapp_bot1",
       language: {
-        // 🔴 CHANGE THIS if your template uses "en_US" instead
+        // If Manager shows English (US) / en_US, change this to "en_US"
         code: "en"
       }
-      // No components needed because your template has no variables
     }
   };
 
-  await axios.post(url, payload, {
+  const response = await axios.post(url, payload, {
     headers: {
       "Content-Type": "application/json",
       Authorization: `Bearer ${WHATSAPP_ACCESS_TOKEN}`
     }
   });
 
-  console.log("✅ Sent template to", to);
+  console.log("✅ Sent template to", to, "message id:", response.data.messages?.[0]?.id);
 }
 
 // --- Start server (Render uses PORT env var) ---
