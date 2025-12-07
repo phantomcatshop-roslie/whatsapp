@@ -75,7 +75,7 @@ async function sendOfferTemplate(to) {
     type: "template",
     template: {
       // 🔴 CHANGE THIS to your real template name
-      name: "welcome",
+      name: "trial1",
       language: {
         // 🔴 CHANGE THIS if your template uses "en_US" instead
         code: "en"
