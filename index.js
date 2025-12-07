@@ -1,16 +1,23 @@
+// index.js – Phantom Cat WhatsApp bot
+// Step 2: auto-send ONE template whenever someone messages the number.
+
 const express = require("express");
 const axios = require("axios");
 
 const app = express();
 app.use(express.json());
 
-// 🔐 These will come from Render environment variables
-const VERIFY_TOKEN        = process.env.WHATSAPP_VERIFY_TOKEN;      // you choose this
-const WHATSAPP_ACCESS_TOKEN = process.env.WHATSAPP_ACCESS_TOKEN;    // long-lived token (but in ENV only)
-const PHONE_NUMBER_ID     = process.env.WHATSAPP_PHONE_NUMBER_ID;   // e.g. 817181248154699
-    // e.g. 817181248154699
+// 🔐 Env vars from Render
+const VERIFY_TOKEN = process.env.WHATSAPP_VERIFY_TOKEN;
+const WHATSAPP_ACCESS_TOKEN = process.env.WHATSAPP_ACCESS_TOKEN;
+const PHONE_NUMBER_ID = process.env.WHATSAPP_PHONE_NUMBER_ID;
 
-// 1️⃣ Webhook verification (Meta calls this with GET once when you connect it)
+// --- Health check ---
+app.get("/", (req, res) => {
+  res.send("Phantom Cat WhatsApp bot is running 😼");
+});
+
+// --- Webhook verification (Meta calls this once when you connect it) ---
 app.get("/webhook", (req, res) => {
   const mode = req.query["hub.mode"];
   const token = req.query["hub.verify_token"];
@@ -25,62 +32,70 @@ app.get("/webhook", (req, res) => {
   }
 });
 
-// 2️⃣ Incoming messages (Meta sends POST here)
+// --- Incoming messages ---
 app.post("/webhook", async (req, res) => {
   try {
     const body = req.body;
-    const change = body?.entry?.[0]?.changes?.[0];
-    const value = change?.value;
-    const messages = value?.messages;
 
-    // Ignore non-message events
-    if (!messages || messages.length === 0) {
+    // Safety checks
+    if (!body.object || !body.entry || !body.entry[0].changes) {
       return res.sendStatus(200);
     }
 
-    const msg = messages[0];
-    const from = msg.from; // WhatsApp number like "9170xxxxxxx"
+    const change = body.entry[0].changes[0];
+    const value = change.value || {};
+    const messages = value.messages || [];
 
-    // 💬 Your simple 3-option menu
-    const replyText =
-      "Hey! 👋\n" +
-      "Here are some quick links:\n\n" +
-      "1️⃣ Track your order: https://phantomcat.shop/apps/track\n" +
-      "2️⃣ Refund / Exchange: https://phantomcat.shop/policies/refund-policy\n" +
-      "3️⃣ View sale: https://phantomcat.shop/collections/sale\n\n" +
-      "Reply to this message if you still need help.";
+    if (!messages[0]) {
+      return res.sendStatus(200);
+    }
 
-    // Send reply via WhatsApp Cloud API
-    await axios.post(
-      `https://graph.facebook.com/v22.0/${PHONE_NUMBER_ID}/messages`,
-      {
-        messaging_product: "whatsapp",
-        to: from,
-        type: "text",
-        text: { body: replyText }
-      },
-      {
-        headers: {
-          Authorization: `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
-          "Content-Type": "application/json"
-        }
-      }
-    );
+    const message = messages[0];
+    const from = message.from; // WhatsApp user phone (international format)
 
-    console.log("✅ Sent menu to", from);
+    console.log("📩 Incoming message from", from);
+
+    // 👉 Step 2: ALWAYS send the promo template back
+    await sendOfferTemplate(from);
+
     return res.sendStatus(200);
   } catch (err) {
-    console.error("Error handling webhook:", err.response?.data || err.message);
-    return res.sendStatus(200); // Return 200 so Meta doesn't spam retries
+    console.error("Error in /webhook handler:", err.response?.data || err.message);
+    return res.sendStatus(500);
   }
 });
 
-// 3️⃣ Simple health check
-app.get("/", (_req, res) => {
-  res.send("Phantom Cat WhatsApp bot is alive 🐈‍⬛");
-});
+// --- Helper: send the offer template with flow button ---
+async function sendOfferTemplate(to) {
+  const url = `https://graph.facebook.com/v21.0/${PHONE_NUMBER_ID}/messages`;
 
+  const payload = {
+    messaging_product: "whatsapp",
+    to,
+    type: "template",
+    template: {
+      // 🔴 CHANGE THIS to your real template name
+      name: "welcome",
+      language: {
+        // 🔴 CHANGE THIS if your template uses "en_US" instead
+        code: "en"
+      }
+      // No components needed because your template has no variables
+    }
+  };
+
+  await axios.post(url, payload, {
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${WHATSAPP_ACCESS_TOKEN}`
+    }
+  });
+
+  console.log("✅ Sent template to", to);
+}
+
+// --- Start server (Render uses PORT env var) ---
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-  console.log(`🚀 Bot server listening on port ${PORT}`);
+  console.log(`🚀 Phantom Cat bot listening on port ${PORT}`);
 });
