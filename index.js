@@ -20,6 +20,23 @@ app.get("/", (req, res) => {
   res.send("Phantom Cat WhatsApp bot is running 😼");
 });
 
+// --- Forward incoming messages to Zapier ---
+async function forwardToZapier(payload) {
+  try {
+    await fetch(process.env.ZAPIER_WEBHOOK_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(payload)
+    });
+    console.log("✅ Forwarded event to Zapier");
+  } catch (err) {
+    console.error("❌ Failed to forward to Zapier:", err.message);
+  }
+}
+
+
 // --- Webhook verification (Meta calls this once when you connect it) ---
 app.get("/webhook", (req, res) => {
   const mode = req.query["hub.mode"];
@@ -57,6 +74,13 @@ app.post("/webhook", async (req, res) => {
 
     console.log("📩 Incoming message from", from, "type:", message.type);
 
+    await forwardToZapier({
+  phone: from,
+  type: message.type,
+  text: message.text?.body || "",
+  timestamp: Date.now()
+});
+
     // Only send template once per 24 hours per user
     const now = Date.now();
     const last = lastTemplateSentAt[from] || 0;
@@ -68,8 +92,8 @@ app.post("/webhook", async (req, res) => {
 // }
 
 
-    await sendOfferTemplate(from);
-    lastTemplateSentAt[from] = now;
+    // await sendOfferTemplate(from);
+    // lastTemplateSentAt[from] = now;
 
     return res.sendStatus(200);
   } catch (err) {
