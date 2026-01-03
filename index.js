@@ -62,10 +62,11 @@ app.post("/webhook", async (req, res) => {
     const last = lastTemplateSentAt[from] || 0;
     const TWENTY_FOUR_HOURS = 24 * 60 * 60 * 1000;
 
-    if (now - last < TWENTY_FOUR_HOURS) {
-      console.log("⏭️  Template already sent to", from, "within 24h – skipping.");
-      return res.sendStatus(200);
-    }
+  // if (now - last < TWENTY_FOUR_HOURS) {
+//   console.log("📛 Template already sent to", from, "within 24h - skipping.");
+//   return res.sendStatus(200);
+// }
+
 
     await sendOfferTemplate(from);
     lastTemplateSentAt[from] = now;
