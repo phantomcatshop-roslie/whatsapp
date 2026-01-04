@@ -11,6 +11,14 @@ const VERIFY_TOKEN = process.env.WHATSAPP_VERIFY_TOKEN;
 const WHATSAPP_ACCESS_TOKEN = process.env.WHATSAPP_ACCESS_TOKEN;
 const PHONE_NUMBER_ID = process.env.WHATSAPP_PHONE_NUMBER_ID;
 
+const ZAPIER_WEBHOOK_URL = (process.env.ZAPIER_WEBHOOK_URL || "").trim();
+
+console.log("🔎 ZAPIER_WEBHOOK_URL loaded?", !!ZAPIER_WEBHOOK_URL);
+console.log(
+  "🔎 ZAPIER_WEBHOOK_URL tail:",
+  ZAPIER_WEBHOOK_URL ? ZAPIER_WEBHOOK_URL.slice(-10) : "MISSING"
+);
+
 // Simple memory: last time we sent the template to each user
 // { "<phone>": timestamp }
 const lastTemplateSentAt = {};
@@ -23,13 +31,17 @@ app.get("/", (req, res) => {
 // --- Forward incoming messages to Zapier ---
 async function forwardToZapier(payload) {
   try {
-    await fetch(process.env.ZAPIER_WEBHOOK_URL, {
+    if (!ZAPIER_WEBHOOK_URL) {
+      console.error("❌ ZAPIER_WEBHOOK_URL is missing at runtime (env not applied to this deploy).");
+      return;
+    }
+
+    await fetch(ZAPIER_WEBHOOK_URL, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload)
     });
+
     console.log("✅ Forwarded event to Zapier");
   } catch (err) {
     console.error("❌ Failed to forward to Zapier:", err.message);
